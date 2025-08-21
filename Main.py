@@ -1,0 +1,354 @@
+import os
+import click
+from getAttributes import getElements
+from toCSV import toCSV
+from cleanData import *
+from Time import *
+from stats import *
+from Koordinates import *
+from Map import *
+from Persons import *
+
+@click.group()
+def cli():
+    "Toolbox for analysing Telecommunications surveillance Data."
+    pass
+
+@cli.command()
+@click.option('--path', prompt='Project directory', type=click.Path(), help='Path to the project directory.')
+def new_project(path):
+    "Create a new project folder with necessary subfolders."
+    csv_dir = os.path.join(path, "CSV")
+    count_dir = os.path.join(path, "Counts")
+
+    os.makedirs(csv_dir, exist_ok=True)
+    os.makedirs(count_dir, exist_ok=True)
+
+    click.echo(f"Project created at: {path}")
+    click.echo(f"CSV folder: {csv_dir}")
+    click.echo(f"Counts folder: {count_dir}")
+
+@cli.command()
+@click.option('--source', prompt='XML source folder', type=click.Path(exists=True), help='Folder containing XML files.')
+@click.option('--project', prompt='Project folder', type=click.Path(exists=True), help='Project directory to save CSVs.')
+def import_xml(source, project):
+    "Import XML files and convert selected elements to CSV."
+    if not os.path.isfile(os.path.join(project,"elements.txt")):
+        # auto-detect and prompt
+        all_elements = getElements(source)
+        click.echo("Available elements found:")
+        for i, el in enumerate(all_elements):
+            click.echo(f"{i + 1}: {el}")
+
+        choices = click.prompt("Enter comma-separated numbers of elements to include", type=str)
+        indices = [int(x.strip()) - 1 for x in choices.split(",")]
+        selected = [all_elements[i] for i in indices]
+        
+        with open(os.path.join(project, "elements.txt"), "w") as f:
+            for el in selected:
+                f.write(f"{el}\n")
+    else:
+        with open(os.path.join(project, "elements.txt"), "r") as f:
+            selected = [line.strip() for line in f if line.strip()]
+
+    csv_dir = os.path.join(project, "CSV")
+    os.makedirs(csv_dir, exist_ok=True)
+
+    toCSV(source, csv_dir, selected, "</ResponseRecord>")
+    click.echo(f"CSV files created in: {csv_dir}")
+
+
+@cli.command()
+@click.option('--project', prompt='Project folder', type=click.Path(exists=True), help='Project directory.')
+def remove_double(project):
+    "Remove duplicate entries from CSV files."
+    csv_dir = os.path.join(project, "CSV")
+    elements_path = os.path.join(project, "elements.txt")
+
+    with open(elements_path, "r") as f:
+        elements = [line.strip() for line in f if line.strip()]
+
+    removedouble(csv_dir, elements)
+    click.echo(f"Duplicates removed from CSV files in: {csv_dir}")
+
+
+@cli.command()
+@click.option('--project', prompt='Project folder', type=click.Path(exists=True), help='Project directory.')
+@click.option('--field', prompt='Field to clean', help='The element (column) to remove empty entries from.')
+def remove_empty(project, field):
+    "Remove rows with empty values in the specified field."
+    csv_dir = os.path.join(project, "CSV")
+    elements_path = os.path.join(project, "elements.txt")
+
+    with open(elements_path, "r") as f:
+        elements = [line.strip() for line in f if line.strip()]
+
+    if field not in elements:
+        click.echo(f"'{field}' not found in elements.txt. Available fields: {', '.join(elements)}")
+        return
+
+    removeWithout(csv_dir, elements, field)
+    click.echo(f"Removed entries with empty '{field}' from CSV files in: {csv_dir}")
+
+
+@cli.command()
+@click.option('--project', prompt='Project folder', type=click.Path(exists=True), help='Project directory.')
+@click.option('--field', prompt='Field to analyze', help='The element to calculate mean, median, and mode for.')
+def mean(project, field):
+    "Calculate mean, median, and mode for a specified field."
+    csv_dir = os.path.join(project, "CSV")
+    elements_path = os.path.join(project, "elements.txt")
+
+    with open(elements_path, "r") as f:
+        elements = [line.strip() for line in f if line.strip()]
+
+    if field not in elements:
+        click.echo(f"'{field}' not found in elements.txt. Available fields: {', '.join(elements)}")
+        return
+
+    avg, median, mode = Mean(elements, field, csv_dir)
+
+    click.echo(f"Statistics for '{field}':")
+    click.echo(f"Mean   : {avg}")
+    click.echo(f"Median : {median}")
+    click.echo(f"Mode   : {mode}")
+
+
+@cli.command()
+@click.option('--project', prompt='Project folder', type=click.Path(exists=True), help='Project directory.')
+@click.option('--field', prompt='Field to analyze', help='The field to get top N values from.')
+@click.option('--n', default=3, show_default=True, type=int, help='Number of top values to show.')
+@click.option('--mode', type=click.Choice(['min', 'max']), prompt='Show min or max values?', help='Whether to show min or max values.')
+def min_max(project, field, n, mode):
+    "Show top N min or max values for a given field."
+    csv_dir = os.path.join(project, "CSV")
+    elements_path = os.path.join(project, "elements.txt")
+
+    with open(elements_path, "r") as f:
+        elements = [line.strip() for line in f if line.strip()]
+
+    if field not in elements:
+        click.echo(f"'{field}' not found in elements.txt. Available fields: {', '.join(elements)}")
+        return
+
+    what = 1 if mode == "min" else 2
+    results = getMinMax(what, n, elements, field, csv_dir)
+
+    click.echo(f"Top {n} {mode.upper()} values for '{field}':")
+    for i, val in enumerate(results, 1):
+        click.echo(f"  {i}. {val}")
+
+
+
+@cli.command()
+@click.option('--project', prompt='Project folder', type=click.Path(exists=True), help='Project directory.')
+@click.option('--field', prompt='Field to count', help='The field to count occurrences of.')
+def counts(project, field):
+    "Count value occurrences for a field across all CSV files and calculate statistics."
+    csv_dir = os.path.join(project, "CSV")
+    count_dir = os.path.join(project, "Counts")
+    elements_path = os.path.join(project, "elements.txt")
+    output_file = os.path.join(count_dir, f"{field}.csv")
+
+    with open(elements_path, "r") as f:
+        elements = [line.strip() for line in f if line.strip()]
+
+    if field not in elements:
+        click.echo(f"'{field}' not found in elements.txt. Available fields: {', '.join(elements)}")
+        return
+
+    if not os.path.isfile(output_file):
+        counter = calc(csv_dir, elements, field)
+        array = counter.most_common()
+        with open(output_file, "w", newline="") as f:
+            writer = csv.writer(f)
+            writer.writerow([field, "count"])
+            writer.writerows(array)
+
+    temp_elements = [field, "count"]
+    avg, median, mode = Mean(temp_elements, "count", count_dir)
+
+    with open(output_file, "r") as f:
+        row_count = sum(1 for row in f if row.strip()) - 1
+
+    click.echo(f"Counted {row_count} unique values for field '{field}':")
+    click.echo(f"Mean   : {avg}")
+    click.echo(f"Median : {median}")
+    click.echo(f"Mode   : {mode}")
+
+
+@cli.command()
+@click.option('--project', prompt='Project folder', type=click.Path(exists=True), help='Project directory.')
+@click.option('--start-field', prompt='Start time field', help='Field that contains the start timestamp.')
+@click.option('--end-field', prompt='End time field', help='Field that contains the end timestamp.')
+def time_range(project, start_field, end_field):
+    "Calculate the time range based on start and end fields."
+    csv_dir = os.path.join(project, "CSV")
+    elements_path = os.path.join(project, "elements.txt")
+
+    with open(elements_path, "r") as f:
+        elements = [line.strip() for line in f if line.strip()]
+
+    for field in (start_field, end_field):
+        if field not in elements:
+            click.echo(f"'{field}' not found in elements.txt. Available fields: {', '.join(elements)}")
+            return
+
+    start, stop, difference = getTimeRange(csv_dir, elements, start_field, end_field)
+
+    click.echo(f"Time Range:")
+    click.echo(f"First Entry : {start}")
+    click.echo(f"Last Entry  : {stop}")
+    click.echo(f"Difference  : {difference}")
+
+
+@cli.command()
+@click.option('--project', prompt='Project folder', type=click.Path(exists=True), help='Project directory.')
+@click.option('--start-field', prompt='Start time field', help='Field that contains the start timestamp.')
+@click.option('--end-field', prompt='End time field', help='Field that contains the end timestamp.')
+def heatmap(project, start_field, end_field):
+    """Generate a heatmap based on time intervals."""
+    csv_dir = os.path.join(project, "CSV")
+    elements_path = os.path.join(project, "elements.txt")
+
+    with open(elements_path, "r") as f:
+        elements = [line.strip() for line in f if line.strip()]
+
+    for field in (start_field, end_field):
+        if field not in elements:
+            click.echo(f"'{field}' not found in elements.txt. Available fields: {', '.join(elements)}")
+            return
+
+    getheatmap(csv_dir, elements, start_field, end_field)
+    click.echo("Heatmap generated.")
+
+
+@cli.command()
+@click.option('--project', prompt='Project folder', type=click.Path(exists=True), help='Project directory.')
+@click.option('--latitude-field', prompt='Latitude field', help='Field name for latitude.')
+@click.option('--longitude-field', prompt='Longitude field', help='Field name for longitude.')
+@click.option('--format', type=click.Choice(['1', '2']), prompt='Coordinate format (1=Decimal Degrees, 2=Degrees Decimal Minutes)', help='Coordinate format: (1=Decimal Degrees, 2=Degrees Decimal Minutes).')
+def add_koordinates(project, latitude_field, longitude_field, format):
+    "Add and count unique coordinates from CSV files."
+    csv_dir = os.path.join(project, "CSV")
+    elements_path = os.path.join(project, "elements.txt")
+    output_file = os.path.join(project, "Koordinates.csv")
+
+    with open(elements_path, "r") as f:
+        elements = [line.strip() for line in f if line.strip()]
+
+    for field in (latitude_field, longitude_field):
+        if field not in elements:
+            click.echo(f"'{field}' not found in elements.txt. Available fields: {', '.join(elements)}")
+            return
+
+    koordformat = int(format)
+    counter = getKoordinates(csv_dir, elements, latitude_field, longitude_field, koordformat)
+
+    if not os.path.isfile(output_file):
+        with open(output_file, "w", newline="") as f:
+            f.write("Latitude,Longitude,Original Latitude,Original Longitude,count\n")
+
+    with open(output_file, "a", newline="") as f:
+        for key, count in counter.items():
+            line = f"{key},{count}\n"
+            f.write(line)
+
+    click.echo(f"Coordinates added to {output_file}")
+
+
+@cli.command()
+@click.option('--project', prompt='Project folder', type=click.Path(exists=True), help='Project directory.')
+def create_map(project):
+    "Creates a Map with the added coordinates."
+    createMap(project)
+    click.echo(f"Coordinates added to {os.path.join(project, 'Map.html')}")
+
+@cli.command()
+@click.option('--project', prompt='Project folder', type=click.Path(exists=True), help='Project directory.')
+@click.option('--element', prompt='Field testing for uniqueness', help='This is the Attribute to be tested for mapping.')
+@click.option('--compairto', prompt='Attribute to map on Key Attribute', help='This is the Attribute to be tested for mapping.')
+def testkeys(project, element, compairto):
+    """Compares two possible keys to find which one is suitable."""
+    elements_path = os.path.join(project, "elements.txt")
+    csv_dir = os.path.join(project, "CSV")
+    
+    with open(elements_path, "r") as f:
+        elements = [line.strip() for line in f if line.strip()]
+    
+    for field in (element, compairto):
+        if field not in elements:
+            click.echo(f"'{field}' not found in elements.txt. Available fields: {', '.join(elements)}")
+            return
+
+    click.echo(hasMultiple(csv_dir, elements, element, compairto))
+    click.echo(hasMultiple(csv_dir, elements, compairto, element))
+
+
+@cli.command()
+@click.option('--project', prompt='Project folder', type=click.Path(exists=True), help='Project directory.')
+def personlist(project):
+    "create a List of all Persons found in the Data"
+    csv_dir = os.path.join(project, "CSV")
+
+    Persons = ProfileList(csv_dir)
+
+    for person in Persons:
+        locations = set()
+        for msisdn in person.mSISDNList:
+            loc = LocatePhoneNumber(msisdn)
+            locations.add(loc)
+            person.location = ";".join(sorted(locations)) if locations else ""
+
+    with open(os.path.join(project,"PersonenListe.csv"), "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["PersonID","Entries", "iMSIs", "iMEIs", "mSISDNs","nationality"])  # header
+        for idx, person in enumerate(Persons, start=1):
+            writer.writerow([
+                idx,
+                person.line_count,
+                ";".join(person.iMSIList),
+                ";".join(person.iMEIList),
+                ";".join(person.mSISDNList),
+                person.location
+        ])
+            
+    with open(os.path.join(project,"badNumbers.txt"), "w", newline="") as f:
+        f.writelines(badNumbers)
+
+    print(f"Saved merged person list to {os.path.join(project, "personenliste.csv")}")
+
+@cli.command()
+@click.option('--project', prompt='Project folder', type=click.Path(exists=True), help='Project directory.')
+def countNations(project):
+    "counts for the nationalities inside the Personlist"
+    with open(os.path.join(project,"PersonenListe.csv"), "r") as f:
+
+        data = []
+
+        csvFile = csv.reader(f, delimiter=",")
+        next(csvFile, None)
+        for line in csvFile:
+            value = line[5]
+
+            if value:
+                data.append(value)
+            elif line[4]:
+                data.append("badNumber")
+            else:
+                data.append("noNumber")
+                    
+        counter = Counter(data)
+
+
+    array = counter.most_common()
+    with open(os.path.join(project,"Counts","nationalities.csv"), "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["nationality", "count"])
+        writer.writerows(array)
+
+
+if __name__ == '__main__':
+    cli()
+
+
