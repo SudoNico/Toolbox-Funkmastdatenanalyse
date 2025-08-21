@@ -82,4 +82,20 @@ def calc(directory, elements, element):
     counter = Counter(data)
 
     return counter
+
+# returns a list of all values an element has
+def getUnique(directory,elements,element):
+    element_index = elements.index(element)
+
+    data = set()
+
+    for file in os.listdir(directory):
+        with open(os.path.join(directory, os.fsdecode(file)), "r") as f:
+            csvFile = csv.reader(f, delimiter=",")
+            for line in csvFile:
+                value = line[element_index]
+                if value != element:
+                        data.add(value)
+    
+    return data
     
