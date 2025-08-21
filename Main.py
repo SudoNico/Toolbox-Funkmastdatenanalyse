@@ -139,6 +139,35 @@ def min_max(project, field, n, mode):
         click.echo(f"  {i}. {val}")
 
 
+@cli.command()
+@click.option('--firstproject', prompt='first Project folder', type=click.Path(exists=True), help='Project directory.')
+@click.option('--secondproject', prompt='second Project folder', type=click.Path(exists=True), help='Project directory.')
+@click.option('--element', prompt='element to be checked', help='element to check for existing values in two projects')
+def check_cross_project(firstproject,secondproject,element):
+
+    csv_dir_firstproject = os.path.join(firstproject, "CSV")
+    csv_dir_secondproject = os.path.join(secondproject, "CSV")
+
+    elements_path_firstproject = os.path.join(firstproject, "elements.txt")
+    elements_path_secondproject = os.path.join(secondproject, "elements.txt")
+
+    with open(elements_path_firstproject, "r") as f:
+        firstelements = [line.strip() for line in f if line.strip()]
+
+    with open(elements_path_secondproject, "r") as f:
+        secondelements = [line.strip() for line in f if line.strip()]
+
+    firstset = getUnique(csv_dir_firstproject,firstelements,element)
+    secondset = getUnique(csv_dir_secondproject,secondelements,element)
+
+    result = firstset.intersection(secondset)
+
+    if not bool(result):
+        click.echo("There are no values that exist in both projects")
+    else:
+        click.echo("there are " + str(len(result))+ " values existing in both projects")
+        click.echo(result)
+
 
 @cli.command()
 @click.option('--project', prompt='Project folder', type=click.Path(exists=True), help='Project directory.')
@@ -350,5 +379,6 @@ def countNations(project):
 
 if __name__ == '__main__':
     cli()
+
 
 
