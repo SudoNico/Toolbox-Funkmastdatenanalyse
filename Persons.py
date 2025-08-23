@@ -59,6 +59,7 @@ class Person:
         self.addiMEI(iMEI)
         self.addSISDN(mSISDN)
         self.line_count += 1
+        self.visits = []
 
     def addiMSI(self, iMSI):
         if iMSI and iMSI not in self.iMSIList:
@@ -75,6 +76,8 @@ class Person:
     def increment_count(self):
         self.line_count+=1
 
+    def add_visit(self, time, location):
+        self.visits.append({"time": time, "location": location})
 
 
 def safe_str(val):
@@ -84,8 +87,10 @@ def safe_str(val):
 
 
 # function to create list of all Persons in the dataset
-def ProfileList(directory):
+def ProfileList(project,directory,WithLocations):
 
+    RCT_lookup= lookup(os.path.join(project,"Funkmasten.csv"))
+    
     if os.path.isfile(directory):
         files = [directory]
     else:
@@ -133,6 +138,36 @@ def ProfileList(directory):
                 for ms in person.mSISDNList:
                     mSISDN_index[ms] = person
 
+                # save Movement Sequence
+                if WithLocations:
+                    startTime = row.get("startTime")
+                    
+                    lat = safe_str(row.get("latitude"))
+                    if not lat:
+                        lat = safe_str(row.get("latitudeDec"))
+
+                    lon = safe_str(row.get("longitude"))
+                    if not lon:
+                        lon = safe_str(row.get("longitudeDec"))
+                    
+                    location = None
+
+                    if lat and lon and RCT_lookup:
+                            key = (lat.strip(), lon.strip())
+                            location = RCT_lookup.get(key)
+
+                    if startTime and location:
+                        try:
+                            t = datetime.strptime(startTime, "%Y%m%d%H%M%S%z")
+                        except Exception:
+                            continue
+                        person.add_visit(t, location)
+
+    # sort visited radio cell towers by time visited
+    if WithLocations:
+        for p in Persons:
+            p.visits.sort(key=lambda v: v["time"])
+
     return Persons
 
 
@@ -150,4 +185,20 @@ def LocatePhoneNumber(Number):
     geolocation = geocoder.description_for_number(phoneNumber,"de")
     
     return geolocation
+
+#Load a lookup dict from coordinates to radio cell tower symbol
+def lookup(RCT_csv):
+
+    lookup = {}
+    with open(RCT_csv, "r", newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            lat = safe_str(row.get("Latitude"))
+            lon = safe_str(row.get("Longitude"))
+            mast = safe_str(row.get("Funkmast"))
+
+            if lat and lon and mast:
+                key = (lat.strip(), lon.strip())
+                lookup[key] = mast
+    return lookup
 
