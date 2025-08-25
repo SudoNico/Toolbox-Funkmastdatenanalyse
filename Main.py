@@ -389,7 +389,15 @@ def movement_sequence(project):
         writer = csv.writer(f)
         writer.writerow(["PersonID","Sequence"])  # header
         for idx, person in enumerate(SequenceList, start=1):
-            sequence = "".join(v["location"] for v in person.visits)
+            
+            sequence = ""
+            last = None
+            for v in person.visits:
+                loc = v["location"]
+                if loc != last:
+                    sequence += loc
+                last = loc
+            
             writer.writerow([
                 idx,
                 sequence
@@ -397,3 +405,4 @@ def movement_sequence(project):
     
 if __name__ == '__main__':
     cli()
+
