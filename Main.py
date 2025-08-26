@@ -291,7 +291,7 @@ def personlist(project):
     "creates a list of all the people who appear in the data"
     csv_dir = os.path.join(project, "CSV")
 
-    Persons = ProfileList(project,csv_dir, False)
+    Persons = ProfileList(project,csv_dir, False, False,0)
 
     for person in Persons:
         locations = set()
@@ -379,30 +379,40 @@ def check_cross_project(firstproject,secondproject,element):
 
 @cli.command()
 @click.option('--project', prompt='Project folder', type=click.Path(exists=True), help='Project directory.')
-def movement_sequence(project):
+@click.option('--longsequence', type=click.Choice(['yes', 'no']), prompt='cut sequence in time periods?', help='Whether to cut the sequence in time periods or not')
+def movement_sequence(project,longsequence):
     "creates a movement pattern for each person in the dataset"
     csv_dir = os.path.join(project, "CSV")
 
-    SequenceList = ProfileList(project,csv_dir, True)
+    if longsequence == "yes":
+        empty = click.prompt("Symbol for empty periods", type=str)
+        time = click.prompt("length of a time period in minutes", type=int)
+        SequenceList = ProfileList(project,csv_dir, True,True,empty,time)
+    else:
+        SequenceList = ProfileList(project,csv_dir, True,False,"X",60)
 
     with open(os.path.join(project,"Bewegungsmuster.csv"), "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["PersonID","Sequence"])  # header
         for idx, person in enumerate(SequenceList, start=1):
-            
-            sequence = ""
-            last = None
-            for v in person.visits:
-                loc = v["location"]
-                if loc != last:
-                    sequence += loc
-                last = loc
-            
+
+            if longsequence == "yes":
+                sequence = "|".join(person.sequences)
+            else: 
+                sequence = ""
+                last = None
+                for v in person.visits:
+                    loc = v["location"]
+                    if loc != last:
+                        sequence += loc
+                    last = loc  
+
             writer.writerow([
                 idx,
                 sequence
-        ])
+            ])
     
 if __name__ == '__main__':
     cli()
+
 
