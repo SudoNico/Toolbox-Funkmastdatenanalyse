@@ -4,7 +4,7 @@ import phonenumbers
 from phonenumbers.phonenumberutil import NumberParseException
 from phonenumbers import geocoder
 import math
-from datetime import datetime
+from datetime import datetime, timedelta
 
 badNumbers = set()
 
@@ -88,7 +88,7 @@ def safe_str(val):
 
 
 # function to create list of all Persons in the dataset
-def ProfileList(project,directory,WithLocations):
+def ProfileList(project,directory,WithLocations,longsequence,space,time):
 
     RCT_lookup= lookup(os.path.join(project,"Funkmasten.csv"))
     
@@ -169,6 +169,16 @@ def ProfileList(project,directory,WithLocations):
         for p in Persons:
             p.visits.sort(key=lambda v: v["time"])
 
+    if longsequence:
+        # find global earliest and latest time
+            all_times = [v["time"] for p in Persons for v in p.visits]
+            if all_times:
+                start = min(all_times)
+                end   = max(all_times)
+
+                for p in Persons:
+                    p.sequences = split(p.visits,start,end,time,space)
+    
     return Persons
 
 
@@ -202,4 +212,52 @@ def lookup(RCT_csv):
                 key = (lat.strip(), lon.strip())
                 lookup[key] = mast
     return lookup
+
+#builds a simple sequence
+def build_sequence(visits):
+    seq = ""
+    last = None
+    for v in visits:
+        loc = v["location"]
+        if loc and loc != last:
+            seq += loc
+        last = loc
+    return seq
+
+#splits a sequence in periods
+def split(visits, start, end, time, space):
+
+    if not visits:
+        return [space]
+
+    sequences = []
+    window_start = start
+    window_end = window_start + timedelta(minutes=time)
+
+    idx = 0
+    seq = ""
+    last = None
+
+    while window_start <= end:
+        # collect all visits inside this window
+        while idx < len(visits) and visits[idx]["time"] < window_end:
+            loc = visits[idx]["location"]
+            if loc and loc != last:
+                seq += loc
+            last = loc
+            idx += 1
+
+        # finish window
+        if seq:
+            sequences.append(seq)
+        else:
+            sequences.append(space)
+
+        # advance window
+        seq = ""
+        last = None
+        window_start = window_end
+        window_end = window_start + timedelta(minutes=time)
+
+    return sequences
 
