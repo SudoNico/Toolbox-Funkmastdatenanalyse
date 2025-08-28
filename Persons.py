@@ -77,8 +77,8 @@ class Person:
     def increment_count(self):
         self.line_count+=1
 
-    def add_visit(self, time, location):
-        self.visits.append({"time": time, "location": location})
+    def add_visit(self, start, location, end):
+        self.visits.append({"time": start, "end": end, "location": location})
 
 
 def safe_str(val):
@@ -156,13 +156,16 @@ def ProfileList(project,directory,WithLocations,longsequence,space,time):
                     if lat and lon and RCT_lookup:
                             key = (lat.strip(), lon.strip())
                             location = RCT_lookup.get(key)
-
+                        
                     if startTime and location:
                         try:
-                            t = datetime.strptime(startTime, "%Y%m%d%H%M%S%z")
+                            start = datetime.strptime(startTime, "%Y%m%d%H%M%S%z")
+                            end = row.get("endTime")
+                            end = datetime.strptime(end, "%Y%m%d%H%M%S%z")
+
                         except Exception:
                             continue
-                        person.add_visit(t, location)
+                        person.add_visit(start, location, end)
 
     # sort visited radio cell towers by time visited
     if WithLocations:
@@ -226,38 +229,35 @@ def build_sequence(visits):
 
 #splits a sequence in periods
 def split(visits, start, end, time, space):
-
-    if not visits:
-        return [space]
-
     sequences = []
-    window_start = start
-    window_end = window_start + timedelta(minutes=time)
+    window = timedelta(minutes=time)
 
-    idx = 0
-    seq = ""
-    last = None
+    visits = sorted(visits, key=lambda v: v["time"])
+    x = 0
+    n = len(visits)
 
-    while window_start <= end:
-        # collect all visits inside this window
-        while idx < len(visits) and visits[idx]["time"] < window_end:
-            loc = visits[idx]["location"]
-            if loc and loc != last:
-                seq += loc
-            last = loc
-            idx += 1
+    current = start
+    while current < end:
+        next_window = current + window
+        symbols = []
 
-        # finish window
-        if seq:
-            sequences.append(seq)
-        else:
-            sequences.append(space)
+        # move x forward to skip past visits that ended before this period        
+        while x < n and visits[x]["end"] < current:
+            x += 1
 
-        # advance window
-        seq = ""
+
+        # collect visits that overlap this window
+        j = x
         last = None
-        window_start = window_end
-        window_end = window_start + timedelta(minutes=time)
+        while j < n and visits[j]["time"] < next_window:
+            loc = visits[j]["location"]
+            if loc != last:      # collapse consecutive duplicates inside same period
+                symbols.append(loc)
+            last = loc
+            j += 1
+
+        sequences.append("".join(symbols) if symbols else space)
+        current = next_window
 
     return sequences
 
