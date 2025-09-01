@@ -37,4 +37,10 @@ def build_ann_index(sequences, k):
 
     # Query all sequences
     labels, distances = p.knn_query(vectors, k=k+1)
+
     return labels[:,1:], distances[:,1:]
+
+# Count exact matches between two sequences (ignoring empty symbol).
+def count_same_positions(seq1, seq2, empty_symbol=0):
+    mask = (seq1 == seq2) & (seq1 != empty_symbol)
+    return int(mask.sum())
