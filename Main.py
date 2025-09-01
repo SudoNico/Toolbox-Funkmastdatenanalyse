@@ -8,6 +8,7 @@ from stats import *
 from Koordinates import *
 from Map import *
 from Persons import *
+from sequence import *
 
 @click.group()
 def cli():
@@ -411,8 +412,36 @@ def movement_sequence(project,longsequence):
                 idx,
                 sequence
             ])
+
+@cli.command()
+@click.option('--project', prompt='Project folder', type=click.Path(exists=True), help='Project directory.')
+@click.option('--empty-value', prompt='Symbol used for empty time periods', help='Symbol used for empty time periods')
+@click.option('--n', prompt='top n most similar', help='top n most similar for each sequence',type=int)
+def compair_sequences(project,empty_value,n):
+    "calculates the hamming distance by Approximate Nearest Neighbors (ANN) for each sequence and returns the top-N with the highest match for each sequence"
+
+    lines = []
+
+    with open(os.path.join(project,"Bewegungsmuster.csv"), "r", newline="") as f:
+        csvFile = csv.reader(f, delimiter=",")
+        next(csvFile)
+        for line in csvFile:
+            lines.append(line[1])
+
+
+    sequences, vocab = encode_sequences(lines, empty_value)
+    labels, distances = build_ann_index(sequences, n)
+
+    with open(os.path.join(project,"CompairedSequences.csv"), "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Sequence1", "Sequence2", "same positions"])
+        for i in range(len(sequences)):
+            for j in labels[i]:
+                same_pos = count_same_positions(sequences[i], sequences[j], empty_symbol=0)
+                writer.writerow([i+1, j+1, same_pos])
     
 if __name__ == '__main__':
     cli()
+
 
 
