@@ -22,7 +22,7 @@ def encode_sequences(lines, empty_symbol):
 
 
 # Build an ANN index and query top-k most similar sequences
-def build_ann_index(sequences, k):
+def build_ann_index(sequences, k, distance_metric):
 
     # Convert to float32 for hnswlib
     vectors = sequences.astype(np.float32)
@@ -30,7 +30,7 @@ def build_ann_index(sequences, k):
     dim = vectors.shape[1]
     num_elements = vectors.shape[0]
 
-    p = hnswlib.Index(space="l2", dim=dim)  # use Euclidean distance
+    p = hnswlib.Index(space=, distance_metric, dim=dim)
     p.init_index(max_elements=num_elements, ef_construction=200, M=16)
     p.add_items(vectors)
     p.set_ef(50)
@@ -41,6 +41,7 @@ def build_ann_index(sequences, k):
     return labels[:,1:], distances[:,1:]
 
 # Count exact matches between two sequences (ignoring empty symbol).
-def count_same_positions(seq1, seq2, empty_symbol=0):
+def Hamming(seq1, seq2, empty_symbol=0):
     mask = (seq1 == seq2) & (seq1 != empty_symbol)
     return int(mask.sum())
+
