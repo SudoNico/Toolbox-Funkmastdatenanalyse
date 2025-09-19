@@ -449,9 +449,25 @@ def compair_sequences(project,empty_value,n,output_file,distance_metric):
                 if same_pos > 0:
                     percent = (same_pos/entries[i])*100
                 writer.writerow([i+1, j+1, same_pos, entries[i], percent])
+
+@cli.command()
+@click.option('--project', prompt='Project folder', type=click.Path(exists=True), help='Project directory.')
+@click.option('--file', prompt='search in file', help='selects the file to search in')
+@click.option('--attribute', prompt='search for attribute', help='selects the Attribute to search for')
+@click.option('--value', prompt='search for value', help='selects the value to search for')
+def search(project, file, attribute, value):
+    "search for a value in a file"
+    with open(os.path.join(project,file), "r", newline="") as f:
+        csvFile = csv.reader(f, delimiter=",")
+        header = next(csvFile)
+        pos = header.index(attribute)
+        for line in csvFile:
+            if value in line[pos]:
+                print(line)
     
 if __name__ == '__main__':
     cli()
+
 
 
 
